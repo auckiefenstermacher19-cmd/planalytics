@@ -1,0 +1,911 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Planalytics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,450;9..40,500;9..40,550;9..40,600;9..40,650&display=swap">
+<style>
+/* Layout: slopalytics' frame. Header with chart tabs, a snap-scrolling feed of full-height charts, model sidebar on the right. Dark first. */
+:root {
+  --bg: #000; --hover: #141210; --on-accent: #000; --fg: #fff; --fg-2: #aaa39d; --fg-3: #77716c;
+  --line: #1c1a18; --line-2: #36312d; --surface: #0d0b0a; --accent: #c5ac98;
+  --sidebar-width: 248px; --header-height: 60px;
+  --font: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #fff; --hover: #f1eeea; --on-accent: #fff; --fg: #20201e; --fg-2: #625d57; --fg-3: #77716c;
+    --line: #e8e4df; --line-2: #ccc5be; --surface: #f8f6f3; --accent: #806047; color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #fff; --hover: #f1eeea; --on-accent: #fff; --fg: #20201e; --fg-2: #625d57; --fg-3: #77716c;
+  --line: #e8e4df; --line-2: #ccc5be; --surface: #f8f6f3; --accent: #806047; color-scheme: light;
+}
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font); font-synthesis: none; -webkit-user-select: none; user-select: none; }
+* { box-sizing: border-box; }
+input { -webkit-user-select: text; user-select: text; }
+button, input { font: inherit; }
+button { color: inherit; cursor: pointer; background: none; border: 0; padding: 0; }
+button:disabled { opacity: .4; cursor: default; }
+a { color: inherit; text-decoration: none; }
+button:hover, a:hover { color: var(--fg); }
+button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+::selection { background: var(--accent); color: var(--on-accent); }
+h2, h3 { margin: 0; }
+
+.app { display: grid; grid-template-rows: var(--header-height) minmax(0, 1fr); height: 100%; }
+.app-header { display: flex; align-items: center; gap: 36px; padding: 0 28px; border-bottom: 1px solid var(--line); min-width: 0; }
+.brand { white-space: nowrap; flex-shrink: 0; }
+.brand strong { font-size: 24px; font-weight: 450; letter-spacing: -1.2px; }
+.brand strong span { color: var(--accent); }
+.view-tabs { display: flex; align-self: stretch; align-items: stretch; gap: 22px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.view-tabs button { position: relative; display: flex; align-items: center; gap: 6px; white-space: nowrap; color: var(--fg-2); font-size: 12.5px; }
+.view-tabs button.active { color: var(--fg); }
+.view-tabs button.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: 2px; background: var(--accent); }
+.tab-divider { flex-shrink: 0; align-self: center; width: 1px; height: 14px; background: var(--line-2); }
+.new-tag { font-size: 9.5px; color: var(--accent); border: 1px solid var(--accent); border-radius: 4px; padding: 0 4px; line-height: 14px; }
+.header-actions { display: flex; align-items: center; gap: 2px; margin-left: auto; flex-shrink: 0; }
+.icon-button, .chart-settings summary { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; color: var(--fg-2); }
+.chart-settings { position: relative; }
+.chart-settings summary { cursor: pointer; list-style: none; }
+.chart-settings summary::-webkit-details-marker { display: none; }
+.chart-settings[open] summary, .chart-settings summary:hover, .icon-button:hover { color: var(--fg); }
+.settings-popover { position: absolute; top: calc(100% + 10px); right: 0; z-index: 20; width: 220px; max-width: calc(100vw - 32px); display: flex; flex-direction: column; align-items: flex-start; gap: 14px; padding: 16px; background: var(--surface); border: 1px solid var(--line-2); border-radius: 8px; }
+.control-label { color: var(--fg-3); font-size: 11px; margin-bottom: -8px; }
+.segmented { display: flex; gap: 14px; }
+.segmented button { color: var(--fg-3); font-size: 12px; }
+.segmented button.active { color: var(--fg); }
+.check-button { display: inline-flex; align-items: center; gap: 8px; color: var(--fg-2); font-size: 12px; white-space: nowrap; }
+.selection { width: 12px; height: 12px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line-2); border-radius: 3px; color: var(--on-accent); }
+.selection.checked { background: var(--accent); border-color: var(--accent); }
+.selection svg { width: 10px; height: 10px; }
+.mobile-only { display: none !important; }
+
+.body-layout { display: grid; grid-template-columns: minmax(0, 1fr) var(--sidebar-width); min-height: 0; }
+main { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-width: 0; min-height: 0; }
+.chart-feed { position: relative; min-height: 0; overflow-y: auto; scroll-snap-type: y proximity; scrollbar-width: thin; scrollbar-color: var(--line-2) var(--bg); }
+.chart-section { height: 100%; display: flex; flex-direction: column; padding: 18px 28px 10px; scroll-snap-align: start; }
+.chart-section + .chart-section { border-top: 1px solid var(--line); }
+.chart-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 6px; flex-shrink: 0; }
+.chart-heading h2 { font-size: 16px; font-weight: 500; flex-shrink: 1; }
+.chart-controls { display: flex; align-items: center; gap: 24px; flex-shrink: 0; }
+.pareto-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; color: var(--fg); font-size: 12px; white-space: nowrap; }
+.pareto-toggle[aria-pressed="true"], .pareto-toggle:hover { color: var(--accent); }
+.chart-scale { display: flex; gap: 12px; flex-shrink: 0; }
+.chart-scale button { min-height: 32px; padding: 4px 2px; font-size: 12px; color: var(--fg-3); border-bottom: 1px solid transparent; }
+.chart-scale button[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+.chart-scale button:hover { color: var(--fg); }
+.allow-wrap { position: relative; }
+.allow-btn { min-height: 32px; font-size: 12px; color: var(--fg-2); }
+.allow-btn[aria-expanded="true"], .allow-btn:hover { color: var(--accent); }
+.allow-pop { position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; width: 330px; max-width: calc(100vw - 32px); padding: 14px 16px; background: var(--surface); border: 1px solid var(--line-2); border-radius: 8px; font-size: 12px; -webkit-user-select: text; user-select: text; }
+.allow-pop h3 { font-size: 13px; font-weight: 550; margin-bottom: 4px; }
+.allow-pop p { color: var(--fg-2); margin: 0 0 10px; line-height: 1.5; }
+.allow-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; padding: 8px 0; border-top: 1px solid var(--line); align-items: center; }
+.allow-row .who { display: flex; align-items: center; gap: 7px; font-weight: 550; }
+.allow-row .plan { grid-column: 1; color: var(--fg-3); font-size: 11px; }
+.allow-row label { grid-row: 1 / span 2; grid-column: 2; display: flex; align-items: center; gap: 4px; color: var(--fg-2); font-variant-numeric: tabular-nums; }
+.allow-row input { width: 76px; padding: 3px 6px; text-align: right; color: var(--fg); background: var(--bg); border: 1px solid var(--line-2); border-radius: 5px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.allow-row input:focus { border-color: var(--accent); outline: none; }
+.basis { font-size: 10px; letter-spacing: .02em; color: var(--fg-3); font-weight: 400; }
+.basis.measured { color: var(--accent); }
+.basis.yours { color: var(--fg); }
+.allow-foot { display: flex; justify-content: space-between; gap: 12px; padding-top: 10px; border-top: 1px solid var(--line); color: var(--fg-3); font-size: 11px; }
+.text-button { color: var(--accent); font-size: 12px; }
+
+.chart-wrap { position: relative; display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
+.chart-canvas { position: relative; flex: 1; min-height: 0; }
+.chart-canvas > svg { position: absolute; inset: 0; display: block; overflow: visible; }
+.chart-svg text { font-family: var(--font); }
+.tick { fill: var(--fg-3); font-size: 11px; font-variant-numeric: tabular-nums; }
+.axis-title { fill: var(--fg-3); font-size: 11.5px; }
+.gridline { stroke: var(--line); stroke-width: 1; }
+.series { transition: opacity 120ms; }
+.chart-svg.dim .series:not(.on) { opacity: .15; }
+.series-label { cursor: pointer; }
+.series-label:focus { outline: none; }
+.leader { fill: none; stroke: var(--line-2); stroke-width: 1; }
+.hit { fill: transparent; cursor: pointer; }
+.hit:focus { outline: none; }
+.pareto-line { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 4; pointer-events: none; }
+.bar-value { fill: var(--fg); font-size: 10.5px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.bar-effort { fill: var(--fg-3); font-size: 9.5px; }
+.group-name { font-size: 11.5px; font-weight: 550; }
+.empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--fg-2); font-size: 13px; text-align: center; padding: 20px; }
+.empty strong { color: var(--fg); font-size: 17px; font-weight: 500; }
+@media (prefers-reduced-motion: reduce) { .series { transition: none; } }
+
+.chart-tooltip { position: absolute; top: 28px; left: 8px; z-index: 3; width: 272px; max-width: calc(100vw - 48px); padding: 14px 16px; background: var(--surface); border: 1px solid var(--line-2); border-radius: 8px; pointer-events: none; }
+.chart-tooltip.scatter-tooltip { top: auto; left: auto; right: 8px; bottom: 72px; }
+.chart-tooltip.comparing { width: 400px; }
+.chart-tooltip.pinned { pointer-events: auto; }
+.tooltip-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; }
+.tooltip-head strong { display: inline-flex; align-items: center; gap: 8px; font-weight: 550; }
+.tooltip-head button { width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; color: var(--fg-3); font-size: 20px; }
+.chart-tooltip p { margin: 4px 0 12px; color: var(--fg-2); font-size: 11.5px; }
+.tooltip-value { display: flex; justify-content: space-between; gap: 20px; padding: 4px 0; font-size: 12px; }
+.tooltip-value span { color: var(--fg-2); }
+.tooltip-value b { font-weight: 500; font-variant-numeric: tabular-nums; }
+.chart-tooltip a { display: inline-block; margin-top: 10px; color: var(--accent); font-size: 11.5px; text-decoration: underline; text-underline-offset: 3px; }
+.tip-flag { margin-top: 8px; color: var(--fg-3); font-size: 11px; }
+.comparison-reference { display: flex; align-items: center; gap: 7px; margin: 4px 0 8px; color: var(--fg-2); font-size: 11.5px; }
+.comparison-table { width: 100%; border-collapse: collapse; text-align: right; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.comparison-table th, .comparison-table td { padding: 4px 0 4px 12px; font-weight: 400; }
+.comparison-table thead th { color: var(--fg-3); font-size: 11px; border-bottom: 1px solid var(--line-2); }
+.comparison-table th:first-child { text-align: left; color: var(--fg-2); padding-left: 0; }
+.comparison-table td:last-child { font-weight: 550; }
+
+footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 28px; border-top: 1px solid var(--line); color: var(--fg-3); font-size: 11px; }
+footer a { color: var(--fg-2); }
+.footer-links { display: flex; gap: 20px; white-space: nowrap; }
+.footer-links a:last-child { color: var(--accent); }
+
+.sidebar { display: flex; flex-direction: column; gap: 18px; height: 100%; min-height: 0; padding: 16px 18px; overflow: auto; border-left: 1px solid var(--line); scrollbar-width: thin; scrollbar-color: var(--line-2) var(--bg); }
+.sidebar > * { flex-shrink: 0; }
+.side-heading { display: flex; align-items: center; gap: 8px; margin-bottom: -6px; }
+.side-heading h2 { flex: 1; font-size: 15px; font-weight: 500; }
+.side-heading h2 span { margin-left: 6px; color: var(--fg-3); font-size: 11px; font-weight: 400; font-variant-numeric: tabular-nums; }
+.side-heading button { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; color: var(--fg-3); }
+.side-heading .sheet-done { display: none; }
+.search { display: flex; align-items: center; gap: 8px; height: 32px; color: var(--fg-3); border-bottom: 1px solid var(--line-2); }
+.search:focus-within { border-color: var(--accent); }
+.search input { flex: 1; min-width: 0; color: var(--fg); background: none; border: 0; outline: none; font-size: 12.5px; -webkit-appearance: none; appearance: none; }
+.search input::placeholder { color: var(--fg-3); }
+.search kbd { font: inherit; font-size: 11px; }
+.effort-filter h3, .section-head h3 { font-size: 12px; font-weight: 550; }
+.effort-filter > div { display: flex; flex-wrap: wrap; gap: 4px 8px; margin-top: 8px; }
+.effort-filter button { color: var(--fg); font-size: 11.5px; }
+.effort-filter button[aria-pressed="false"] { color: var(--fg-3); text-decoration: line-through; }
+.section-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+.section-head h3 { flex: 1; }
+.section-head button, .browse-options div button { color: var(--fg-3); font-size: 11.5px; }
+.section-head button[aria-pressed="true"], .browse-options div button[aria-pressed="true"] { color: var(--accent); }
+.model-row { display: flex; align-items: center; gap: 9px; width: calc(100% + 12px); min-height: 26px; margin: 0 -6px; padding: 0 6px; border-radius: 5px; color: var(--fg-3); text-align: left; font-size: 12.5px; }
+@media (hover: hover) { .model-row:hover { background: var(--hover); } }
+.model-row[aria-pressed="true"] { color: var(--fg); }
+.model-row .lab-mono { opacity: .4; }
+.model-row[aria-pressed="true"] .lab-mono, .model-row:hover .lab-mono { opacity: 1; }
+.model-row.off-frontier { opacity: .35; }
+.model-row.on-frontier { font-weight: 550; }
+.model-row.off-frontier:hover, .model-row.off-frontier:focus-visible { opacity: 1; }
+.model-name { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.model-dot { width: 7px; height: 7px; flex-shrink: 0; border-radius: 50%; opacity: .5; box-shadow: inset 0 0 0 1px; }
+.model-row[aria-pressed="true"] .model-dot { opacity: 1; background: currentColor; }
+.lab-mono { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 14px; height: 14px; border-radius: 3px; background: var(--hover); color: var(--fg-2); font-size: 8.5px; font-weight: 650; line-height: 1; letter-spacing: -.02em; }
+.browse-options { display: flex; flex-direction: column; gap: 10px; padding-top: 14px; border-top: 1px solid var(--line); }
+.browse-options > button { color: var(--fg-2); text-align: left; font-size: 12px; }
+.browse-options div { display: flex; gap: 14px; }
+.side-note { margin: 0; color: var(--fg-2); font-size: 12px; }
+
+.context-menu { position: fixed; z-index: 100; width: 250px; max-width: calc(100vw - 16px); padding: 6px; background: var(--surface); border: 1px solid var(--line-2); border-radius: 8px; font-size: 12px; }
+.context-menu-title { padding: 8px; color: var(--accent); overflow-wrap: anywhere; }
+.context-menu button, .context-menu a { display: block; width: 100%; padding: 8px; border-radius: 5px; color: var(--fg-2); text-align: left; }
+.context-menu button:hover, .context-menu button:focus, .context-menu a:hover { background: var(--hover); color: var(--fg); outline: none; }
+.context-menu .menu-divider { margin-top: 5px; border-top: 1px solid var(--line-2); border-radius: 0; }
+
+@media (min-width: 1600px) {
+  .app-header { gap: 44px; } .view-tabs { gap: 26px; } .view-tabs button { font-size: 13px; }
+  .model-row { min-height: 29px; font-size: 13px; }
+}
+@media (min-width: 761px) and (max-height: 820px) { .sidebar { gap: 14px; padding-top: 12px; } .model-row { min-height: 24px; } }
+@media (max-width: 1150px) {
+  .app-header { gap: 24px; padding: 0 18px; } .brand strong { font-size: 21px; }
+  .view-tabs { gap: 16px; } .view-tabs button { font-size: 12px; }
+  .chart-section { padding-left: 18px; padding-right: 18px; } footer { padding: 9px 18px; }
+}
+@media (max-width: 900px) {
+  html, body { height: auto; }
+  .app { display: block; height: auto; }
+  .app-header { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 8; flex-wrap: wrap; gap: 0; height: auto; padding: 0; background: var(--bg); }
+  .brand { display: flex; align-items: center; height: 52px; padding-left: 16px; }
+  .header-actions { height: 52px; padding-right: 10px; }
+  .view-tabs { order: 3; width: 100%; height: 42px; gap: 20px; padding: 0 16px; border-top: 1px solid var(--line); }
+  .view-tabs button { font-size: 13.5px; }
+  .desktop-only { display: none !important; }
+  .mobile-only { display: inline-flex !important; align-items: center; gap: 6px; }
+  .mobile-filter-toggle { height: 40px; padding: 0 6px; color: var(--fg); font-size: 14px; }
+  .mobile-filter-toggle span { color: var(--fg-3); font-size: 12px; }
+  .body-layout, main { display: block; }
+  .chart-feed { overflow: visible; scroll-snap-type: none; }
+  .chart-section { height: auto; padding: 20px 16px 24px; scroll-margin-top: 95px; }
+  .chart-heading { flex-wrap: wrap; gap: 4px 16px; }
+  .chart-heading h2 { flex: 1; font-size: 18px; }
+  .chart-controls { flex: 1 0 100%; justify-content: space-between; flex-wrap: wrap; gap: 4px 16px; }
+  .pareto-toggle, .chart-scale button, .allow-btn { min-height: 44px; }
+  .allow-pop { left: 0; right: auto; }
+  .chart-canvas { flex: none; aspect-ratio: 1 / 1.2; }
+  .chart-tooltip, .chart-tooltip.scatter-tooltip, .chart-tooltip.comparing { position: sticky; top: auto; left: auto; right: auto; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); z-index: 7; width: auto; max-width: none; margin-top: 14px; }
+  .chart-tooltip:not(.comparing) { display: grid; grid-template-columns: 1fr 1fr; column-gap: 20px; padding: 12px 14px; }
+  .chart-tooltip[hidden] { display: none; }
+  .chart-tooltip:not(.comparing) > :not(.tooltip-value) { grid-column: 1 / -1; }
+  .sidebar { position: fixed; inset: 0; z-index: 10; display: none; height: 100dvh; padding: 0 16px calc(24px + env(safe-area-inset-bottom, 0px)); background: var(--bg); border-left: 0; }
+  .sidebar.open { display: flex; }
+  .side-heading { position: sticky; top: 0; z-index: 1; height: 56px; margin: 0 -16px -6px; padding: 0 16px; background: var(--bg); border-bottom: 1px solid var(--line); }
+  .side-heading h2 { font-size: 17px; }
+  .side-heading .sheet-done { display: flex; width: auto; height: 40px; padding: 0 4px 0 12px; color: var(--accent); font-size: 15px; font-weight: 550; }
+  .search { height: 42px; } .search input { font-size: 16px; } .search kbd { display: none; }
+  .effort-filter button, .section-head button, .browse-options div button { min-height: 32px; font-size: 14px; }
+  .effort-filter > div { gap: 0 16px; }
+  .effort-filter h3, .section-head h3 { font-size: 14px; }
+  .model-row { min-height: 44px; font-size: 15px; }
+  .browse-options > button { min-height: 32px; font-size: 14px; }
+  footer { padding: 18px 16px calc(28px + env(safe-area-inset-bottom, 0px)); }
+}
+@media (max-width: 420px) { .brand strong { font-size: 19px; } .header-actions { padding-right: 8px; } }
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+  <header class="app-header">
+    <a class="brand" href="#cost-intelligence" aria-label="Planalytics home"><strong>plan<span>alytics</span></strong></a>
+    <nav class="view-tabs" id="tabs" aria-label="Charts"></nav>
+    <div class="header-actions">
+      <button class="mobile-only mobile-filter-toggle" id="filter-open" type="button">Models <span id="filter-count"></span></button>
+      <button class="icon-button" id="theme" type="button" aria-label="Switch theme"></button>
+      <details class="chart-settings desktop-only" id="settings">
+        <summary aria-label="Chart settings"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4h7M12 4h2M2 12h2M7 12h7"/><circle cx="10.5" cy="4" r="1.5"/><circle cx="5.5" cy="12" r="1.5"/></svg></summary>
+        <div class="settings-popover" id="settings-pop"></div>
+      </details>
+    </div>
+  </header>
+  <div class="body-layout">
+    <main>
+      <div class="chart-feed" id="feed"></div>
+      <footer>
+        <span>Data from <a href="https://artificialanalysis.ai/" target="_blank" rel="noopener">Artificial Analysis</a> by way of <a href="https://slopalytics.com/" target="_blank" rel="noopener">slopalytics</a> · checked <span id="snap"></span></span>
+        <span class="footer-links"><a href="https://slopalytics.com/" target="_blank" rel="noopener">Original site</a></span>
+      </footer>
+    </main>
+    <aside class="sidebar" id="sidebar" aria-label="Models"></aside>
+  </div>
+</div>
+
+<script>
+const DATA = /*DATA*/null;
+const CFG = DATA.config;
+
+// ---------- plan allowances (the one addition to slopalytics) ----------
+// Measured by meter tests on Auckie's own accounts, Oct 19-20 2026 (meter-test/results.md).
+// API dollars at slopalytics' list prices, the same basis as its cost per task.
+// No guessing: a plan nobody has measured has no allowance and stays off the chart.
+const PLANS = {
+  anthropic: { plan: 'Claude Max 20x', price: 200, basis: 'measured', weekly: 2400,
+    note: 'Meter test Oct 20 2026: $117 of API value moved the weekly meter 4% (range $1,900-$3,200). Cached reads count at about a quarter of their API price.' },
+  openai: { plan: 'ChatGPT Plus', price: 20, basis: 'measured', weekly: 65,
+    note: 'Meter test Oct 20 2026: $8.55 moved the weekly meter 13% (range $61-$71). OpenAI publishes no Pro multiplier, so Pro is not shown.' },
+  xai: { plan: 'SuperGrok Heavy', price: 300, basis: 'measured', weekly: 1150,
+    note: 'Meter test Oct 20 2026: 494 tasks moved the weekly meter 5% (range $960-$1,440), priced at Grok 4.7 list prices.' },
+  google: { plan: 'Google AI Ultra 20x', price: 199.99, basis: 'none',
+    note: 'Not measured: no Google account. Enter a number to plot it.' },
+  meta: { plan: 'No paid plan', price: null, basis: 'none' },
+};
+
+// ---------- charts ----------
+const METRICS = {
+  cost: { label: 'Cost per task', unit: 'USD', better: 'lower' },
+  share: { label: 'Share of week', unit: 'of weekly plan', better: 'lower' },
+  time: { label: 'Time per task', unit: 'lower is better', better: 'lower' },
+  tokens: { label: 'Tokens per task', unit: 'output tokens', better: 'lower' },
+  tokensTotal: { label: 'Total tokens', unit: 'output tokens, full index run', better: 'lower' },
+  costTotal: { label: 'Total cost', unit: 'USD, full index run', better: 'lower' },
+  intelligence: { label: 'Intelligence index', unit: 'Artificial Analysis', better: 'higher' },
+  tasks: { label: 'Tasks per week', unit: '', better: 'higher' },
+};
+const CHARTS = [
+  { id: 'cost-intelligence', label: 'Cost vs intelligence', metric: 'cost', scatter: true, xTitle: 'Cost per task (USD, {s} scale)' },
+  { id: 'share-intelligence', label: 'Share of week vs intelligence', metric: 'share', scatter: true, isNew: true, xTitle: 'Share of the plan\'s weekly allowance per task ({s} scale)' },
+  { id: 'speed-intelligence', label: 'Time per task vs intelligence', metric: 'time', scatter: true, xTitle: 'Time per task (lower is better, {s} scale)' },
+  { id: 'tokens-task', label: 'Tokens per task', metric: 'tokens', scatterToggle: true, xTitle: 'Tokens per task (output tokens, {s} scale)', divider: true },
+  { id: 'tokens-total', label: 'Total tokens', metric: 'tokensTotal' },
+  { id: 'cost-task', label: 'Cost per task', metric: 'cost' },
+  { id: 'cost-total', label: 'Total cost', metric: 'costTotal' },
+];
+const EFFORTS = ['none', 'low', 'medium', 'high', 'xhigh', 'max'];
+const EFFORT_LETTER = { none: 'N', minimal: 'Mn', low: 'L', medium: 'M', high: 'H', xhigh: 'X', max: 'Mx', default: 'D' };
+const FALLBACK_COLOR = 'light-dark(#637082, #a4adb9)';
+
+// ---------- state (remembered in this browser only) ----------
+const STORE = 'planalytics-v1';
+const DEFAULT_SELECTED = Object.keys(CFG.frontier).filter(f => !CFG.defaultOff.includes(f));
+const DEFAULTS = () => ({
+  selected: [...DEFAULT_SELECTED], excluded: [...CFG.defaultExcluded], linear: [], scatter: [],
+  frontier: false, labels: true, grouped: true, sort: 'asc', showAll: false, showOpen: false, showDeprecated: false, overrides: {},
+});
+let S = DEFAULTS();
+try { Object.assign(S, JSON.parse(localStorage.getItem(STORE) || '{}')); } catch (e) {}
+function save() { try { localStorage.setItem(STORE, JSON.stringify(S)); } catch (e) {} }
+try { const t = localStorage.getItem(STORE + '-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+
+// ---------- model data ----------
+const labOrder = id => { const i = CFG.labs.findIndex(l => l.id === id); return i < 0 ? CFG.labs.length : i; };
+const effortKey = r => r.effort === 'none' ? 'none' : String(r.effortLabel || r.effort).toLowerCase();
+const shortName = n => n.replace(/^Claude /, '');
+const colorOf = r => CFG.frontier[r.family]?.color ?? CFG.notable[r.family]?.color ?? CFG.labs.find(l => l.id === r.lab)?.color ?? FALLBACK_COLOR;
+const markOpacity = r => .62 + .38 * (r.effortOrder || 0) / 60;
+const hiddenFams = new Set(CFG.hidden || []);
+
+const FAM = new Map();
+for (const r of DATA.rows) {
+  if (hiddenFams.has(r.family)) continue;
+  let f = FAM.get(r.family);
+  if (!f) FAM.set(r.family, f = { id: r.family, name: r.name, lab: r.lab, labName: r.labName, released: r.released, open: false, deprecated: true, rows: [] });
+  f.rows.push(r);
+  f.open ||= !!r.open;
+  f.deprecated &&= !!r.deprecated;
+  if ((r.released || '') > (f.released || '')) f.released = r.released;
+}
+for (const f of FAM.values()) { f.rows.sort((a, b) => a.effortOrder - b.effortOrder); f.color = colorOf(f.rows[0]); }
+const famSort = (a, b) => labOrder(a.lab) - labOrder(b.lab) || a.labName.localeCompare(b.labName) || (b.released || '').localeCompare(a.released || '') || b.name.localeCompare(a.name, 'en', { numeric: true });
+const ALL_FAMS = [...FAM.values()].sort(famSort);
+const FRONTIER_FAMS = ALL_FAMS.filter(f => CFG.frontier[f.id]);
+const NOTABLE_FAMS = ALL_FAMS.filter(f => CFG.notable[f.id]);
+const OTHER_FAMS = ALL_FAMS.filter(f => !CFG.frontier[f.id] && !CFG.notable[f.id]);
+S.selected = S.selected.filter(f => FAM.has(f));
+const labNameOf = lab => CFG.labs.find(l => l.id === lab)?.name || ALL_FAMS.find(f => f.lab === lab)?.labName || lab;
+
+function weekly(lab) {
+  const o = S.overrides[lab];
+  if (o > 0) return o;
+  const p = PLANS[lab];
+  if (!p) return null;
+  return p.weekly || null;
+}
+const basisOf = lab => S.overrides[lab] > 0 ? 'yours' : (PLANS[lab]?.basis || 'none');
+function val(r, m) {
+  if (m === 'share') { const w = weekly(r.lab); return w && r.cost != null ? r.cost / w : null; }
+  if (m === 'tasks') { const s = val(r, 'share'); return s ? 1 / s : null; }
+  return r[m];
+}
+function visibleRows(metric) {
+  const sel = new Set(S.selected), ex = new Set(S.excluded);
+  return DATA.rows.filter(r => sel.has(r.family) && !ex.has(effortKey(r)) && !hiddenFams.has(r.family) && val(r, metric) != null && r.intelligence != null);
+}
+// Non-dominated variants: cheapest first, keep each one smarter than every cheaper one.
+function paretoRows(rows, metric) {
+  const dir = METRICS[metric].better === 'lower' ? 1 : -1;
+  let best = -Infinity;
+  return [...rows].sort((a, b) => (val(a, metric) - val(b, metric)) * dir || b.intelligence - a.intelligence)
+    .filter(r => r.intelligence > best && (best = r.intelligence, true));
+}
+
+// ---------- formatting ----------
+const trim1 = (v, d, s) => v.toFixed(d).replace(/\.0$/, '') + s;
+function fmt(v, m, axis = false) {
+  if (v == null) return '—';
+  if (m === 'time') {
+    if (axis) { const u = v < 60 ? 1 : v < 3600 ? 60 : 3600; return (v / u).toLocaleString('en-US', { maximumFractionDigits: 1 }) + (v < 60 ? 's' : v < 3600 ? 'm' : 'h'); }
+    const t = Math.round(v);
+    return v < 60 ? v.toLocaleString('en-US', { maximumFractionDigits: 1 }) + 's' : t < 3600 ? `${Math.floor(t / 60)}m ${t % 60}s` : `${Math.floor(t / 3600)}h ${Math.floor(t % 3600 / 60)}m`;
+  }
+  if (m === 'cost' || m === 'costTotal') {
+    if (axis && v >= 1000) return '$' + trim1(v / 1000, 1, 'k');
+    return '$' + v.toLocaleString('en-US', { maximumFractionDigits: m === 'costTotal' ? 0 : v < 1 ? 3 : 2, minimumFractionDigits: m === 'cost' && !axis ? 2 : 0 });
+  }
+  if (m === 'share') {
+    if (v === 0) return '0%';
+    const p = v * 100;
+    const d = Math.min(8, Math.max(0, 1 - Math.floor(Math.log10(p))));
+    return p.toFixed(d).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '') + '%';
+  }
+  if (m === 'tasks') return v >= 100 ? Math.round(v).toLocaleString('en-US') : v.toLocaleString('en-US', { maximumSignificantDigits: 2 });
+  if (v >= 1e9) return trim1(v / 1e9, 1, 'B');
+  if (v >= 1e6) return trim1(v / 1e6, 1, 'M');
+  if (v >= 1e3) return trim1(v / 1e3, axis ? 0 : 1, 'k');
+  return v.toLocaleString('en-US', { maximumFractionDigits: m === 'intelligence' ? 1 : axis ? 0 : 1 });
+}
+const ratio = (a, b) => a == null || b == null || a === 0 ? '—' : (b / a).toLocaleString('en-US', { maximumSignificantDigits: 3 }) + '×';
+
+// ---------- dom helpers ----------
+const NS = 'http://www.w3.org/2000/svg';
+function svgEl(tag, attrs, parent) {
+  const n = document.createElementNS(NS, tag);
+  for (const k in attrs) if (attrs[k] != null) n.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+function h(tag, attrs = {}, ...kids) {
+  const n = document.createElement(tag);
+  for (const k in attrs) {
+    if (k === 'on') for (const e in attrs.on) n.addEventListener(e, attrs.on[e]);
+    else if (k === 'class') n.className = attrs[k];
+    else if (k === 'text') n.textContent = attrs[k];
+    else if (attrs[k] != null && attrs[k] !== false) n.setAttribute(k, attrs[k] === true ? '' : attrs[k]);
+  }
+  for (const c of kids.flat()) if (c != null) n.append(c);
+  return n;
+}
+function icon(w, hgt, vb, build) { const s = document.createElementNS(NS, 'svg'); s.setAttribute('width', w); s.setAttribute('height', hgt); s.setAttribute('viewBox', vb); s.setAttribute('aria-hidden', 'true'); build(s); return s; }
+const initials = name => (name.match(/[A-Z0-9]/g) || [name[0]]).slice(0, 2).join('') || name.slice(0, 1).toUpperCase();
+const mono = lab => h('span', { class: 'lab-mono', 'aria-hidden': 'true', text: initials(labNameOf(lab)) });
+function svgMono(parent, x, y, lab, size = 14) {
+  const g = svgEl('g', { transform: `translate(${x},${y})` }, parent);
+  svgEl('rect', { width: size, height: size, rx: 3, style: 'fill: var(--hover)' }, g);
+  svgEl('text', { x: size / 2, y: size / 2 + 3, 'text-anchor': 'middle', style: 'fill: var(--fg-2); font-size: 8.5px; font-weight: 650' }, g).textContent = initials(labNameOf(lab));
+  return g;
+}
+const check = on => h('span', { class: 'selection' + (on ? ' checked' : '') }, on ? icon(10, 10, '0 0 10 10', s => svgEl('path', { d: 'M2 5.2l2 2L8 3', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.6 }, s)) : null);
+
+// ---------- scales ----------
+function niceStep(range, count) {
+  const raw = range / Math.max(1, count), mag = 10 ** Math.floor(Math.log10(raw)), n = raw / mag;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * mag;
+}
+function linTicks(lo, hi, room, gapPx = 70) {
+  const step = niceStep(hi - lo, Math.max(2, Math.floor(room / gapPx)));
+  const out = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi + step * 1e-9; v += step) out.push(+v.toPrecision(12));
+  return out;
+}
+function logTicks(lo, hi, room) {
+  const fit = Math.max(2, Math.floor(room / 54));
+  for (const [steps, stride] of [[[1, 2, 5], 1], [[1, 3], 1], [[1], 1], [[1], 2], [[1], 3]]) {
+    const out = [];
+    for (let e = Math.floor(Math.log10(lo)); e <= Math.ceil(Math.log10(hi)); e++) {
+      if (((e % stride) + stride) % stride) continue;
+      for (const s of steps) { const v = s * 10 ** e; if (v >= lo * .999 && v <= hi * 1.001) out.push(v); }
+    }
+    if (out.length <= fit) return out;
+  }
+  return [];
+}
+
+// ---------- tooltip / pin / compare ----------
+const pins = {}; // chartId -> { a: row, b: row }
+const defOf = id => CHARTS.find(c => c.id === id);
+function tooltipMetrics(def, mode) {
+  if (def.metric === 'share') return ['intelligence', 'share', 'tasks', 'cost'];
+  if (mode === 'bars') return [def.metric, 'intelligence'];
+  return ['intelligence', def.metric, ...(def.metric === 'cost' ? ['tokens', 'time'] : ['cost'])];
+}
+function showTooltip(def, r, sec) {
+  const mode = chartMode(def);
+  const box = sec.querySelector('.chart-tooltip');
+  const pin = pins[def.id] || {};
+  const a = pin.a;
+  const compare = a && r && r.id !== a.id ? r : (a && pin.b ? pin.b : null);
+  const row = r || a;
+  if (!row) { box.hidden = true; return; }
+  const ms = tooltipMetrics(def, mode);
+  box.className = 'chart-tooltip' + (mode === 'scatter' ? ' scatter-tooltip' : '') + (compare ? ' comparing' : '') + (a ? ' pinned' : '');
+  box.innerHTML = '';
+  const close = h('button', { type: 'button', 'aria-label': 'Clear', text: '×', on: { click: () => clearPin(def, sec) } });
+  if (compare) {
+    box.append(
+      h('div', { class: 'tooltip-head' }, h('strong', {}, mono(compare.lab), compare.variant.replace(/^Claude /, '')), close),
+      h('div', { class: 'comparison-reference' }, 'vs', mono(a.lab), a.variant.replace(/^Claude /, '')),
+      h('table', { class: 'comparison-table' },
+        h('thead', {}, h('tr', {}, h('th', { text: '' }), h('th', { text: EFFORT_LETTER[effortKey(a)] ? `${shortName(a.name)} ${EFFORT_LETTER[effortKey(a)]}` : shortName(a.name) }), h('th', { text: EFFORT_LETTER[effortKey(compare)] ? `${shortName(compare.name)} ${EFFORT_LETTER[effortKey(compare)]}` : shortName(compare.name) }), h('th', { text: 'ratio' }))),
+        h('tbody', {}, ms.map(m => h('tr', {}, h('th', { text: METRICS[m].label }), h('td', { text: fmt(val(a, m), m) }), h('td', { text: fmt(val(compare, m), m) }), h('td', { text: ratio(val(a, m), val(compare, m)) }))))));
+  } else {
+    box.append(
+      h('div', { class: 'tooltip-head' }, h('strong', {}, mono(row.lab), row.variant.replace(/^Claude /, '')), a ? close : null),
+      h('p', { text: [row.labName, row.released, row.estimated ? 'estimated' : null].filter(Boolean).join(' · ') }),
+      ms.map(m => h('div', { class: 'tooltip-value' }, h('span', { text: METRICS[m].label }), h('b', { text: (m === 'tasks' && val(row, m) ? '≈ ' : '') + fmt(val(row, m), m) }))));
+    if (def.metric === 'share') {
+      const b = basisOf(row.lab);
+      box.append(h('div', { class: 'tip-flag', text: { measured: `Allowance measured on your ${PLANS[row.lab]?.plan || ''} account.`, yours: 'Allowance entered by you.', none: '' }[b] }));
+    }
+    if (a) box.append(h('a', { href: `https://artificialanalysis.ai/models/${row.id}`, target: '_blank', rel: 'noopener', text: 'Open on Artificial Analysis' }), h('div', { class: 'tip-flag', text: 'Click another point to compare.' }));
+  }
+  box.hidden = false;
+}
+function clearPin(def, sec) { delete pins[def.id]; showTooltip(def, null, sec); setFocus(sec, null); }
+function setFocus(sec, fam) {
+  const svg = sec.querySelector('svg.chart-svg');
+  if (!svg) return;
+  const pin = pins[sec.dataset.id];
+  const keep = new Set([fam, pin?.a?.family, pin?.b?.family].filter(Boolean));
+  svg.classList.toggle('dim', keep.size > 0);
+  svg.querySelectorAll('.series').forEach(g => g.classList.toggle('on', keep.has(g.dataset.fam)));
+}
+function wireHit(node, def, r, sec) {
+  node.setAttribute('tabindex', '0');
+  node.setAttribute('role', 'button');
+  node.setAttribute('aria-label', `${r.variant}: ${METRICS[def.metric].label} ${fmt(val(r, def.metric), def.metric)}, intelligence ${fmt(r.intelligence, 'intelligence')}`);
+  const enter = () => { showTooltip(def, r, sec); setFocus(sec, r.family); };
+  const leave = () => { showTooltip(def, null, sec); setFocus(sec, null); };
+  node.addEventListener('pointerenter', enter);
+  node.addEventListener('focus', enter);
+  node.addEventListener('pointerleave', leave);
+  node.addEventListener('blur', leave);
+  const click = () => {
+    const p = pins[def.id];
+    if (!p || !p.a) pins[def.id] = { a: r };
+    else if (p.a.id === r.id) delete pins[def.id];
+    else pins[def.id] = { a: p.a, b: r };
+    enter();
+  };
+  node.addEventListener('click', click);
+  node.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); click(); } });
+  node.addEventListener('contextmenu', e => { e.preventDefault(); openMenu(e.clientX, e.clientY, r); });
+}
+
+// ---------- context menu ----------
+let menu = null;
+function closeMenu() { if (menu) { menu.remove(); menu = null; } }
+function openMenu(x, y, r) {
+  closeMenu();
+  const fam = FAM.get(r.family);
+  menu = h('div', { class: 'context-menu', role: 'menu' },
+    h('div', { class: 'context-menu-title', text: shortName(fam.name) }),
+    h('button', { type: 'button', role: 'menuitem', text: 'Hide this model', on: { click: () => { closeMenu(); toggleFam(fam.id, false); } } }),
+    h('button', { type: 'button', role: 'menuitem', text: 'Show only this model', on: { click: () => { closeMenu(); S.selected = [fam.id]; commit(); } } }),
+    h('button', { type: 'button', role: 'menuitem', text: `Show only ${fam.labName}`, on: { click: () => { closeMenu(); S.selected = S.selected.filter(id => FAM.get(id)?.lab === fam.lab); if (!S.selected.includes(fam.id)) S.selected.push(fam.id); commit(); } } }),
+    h('a', { class: 'menu-divider', role: 'menuitem', href: `https://artificialanalysis.ai/models/${r.id}`, target: '_blank', rel: 'noopener', text: 'Open on Artificial Analysis' }));
+  document.body.append(menu);
+  const w = menu.offsetWidth, ht = menu.offsetHeight;
+  menu.style.left = Math.max(8, Math.min(x, innerWidth - w - 8)) + 'px';
+  menu.style.top = Math.max(8, Math.min(y, innerHeight - ht - 8)) + 'px';
+  menu.querySelector('button').focus();
+}
+addEventListener('pointerdown', e => { if (menu && !menu.contains(e.target)) closeMenu(); });
+addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  closeMenu();
+  for (const sec of feed.children) if (pins[sec.dataset.id]) clearPin(defOf(sec.dataset.id), sec);
+});
+
+// ---------- scatter ----------
+function emptyState(canvas, why) { canvas.append(h('div', { class: 'empty' }, h('strong', { text: 'No models to show' }), h('span', { text: why }))); }
+function drawScatter(sec, def) {
+  const metric = def.metric;
+  const canvas = sec.querySelector('.chart-canvas');
+  canvas.querySelectorAll('svg, .empty').forEach(n => n.remove());
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  if (W < 50 || H < 50) return;
+  const rows = visibleRows(metric);
+  if (!rows.length) {
+    emptyState(canvas, metric === 'share' && visibleRows('cost').length ? 'None of the selected models has a plan allowance. Add one under Allowances.' : 'Pick models in the sidebar to see them here.');
+    return;
+  }
+  const log = !S.linear.includes(def.id);
+  const narrow = W < 560;
+  const m = { l: 40, r: S.labels ? (narrow ? 112 : 150) : 16, t: 30, b: 46 };
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const xs = rows.map(r => val(r, metric));
+  let lo = Math.min(...xs), hi = Math.max(...xs);
+  if (log) { lo /= 1.35; hi *= 1.35; } else { lo = 0; hi *= 1.06; }
+  const iy = rows.map(r => r.intelligence);
+  const y0 = Math.max(0, Math.floor((Math.min(...iy) - 2) / 10) * 10), y1 = Math.ceil((Math.max(...iy) + 1) / 10) * 10;
+  const X = v => m.l + (log ? (Math.log10(v) - Math.log10(lo)) / (Math.log10(hi) - Math.log10(lo)) : (v - lo) / (hi - lo)) * pw;
+  const Y = v => m.t + (1 - (v - y0) / (y1 - y0)) * ph;
+
+  const svg = svgEl('svg', { class: 'chart-svg', width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: 'group', 'aria-label': def.label }, canvas);
+  for (const v of linTicks(y0, y1, ph, 50)) {
+    svgEl('line', { class: 'gridline', x1: m.l, x2: m.l + pw, y1: Y(v), y2: Y(v) }, svg);
+    svgEl('text', { class: 'tick', x: m.l - 10, y: Y(v) + 4, 'text-anchor': 'end' }, svg).textContent = v;
+  }
+  for (const v of (log ? logTicks(lo, hi, pw) : linTicks(lo, hi, pw))) {
+    svgEl('text', { class: 'tick', x: X(v), y: m.t + ph + 20, 'text-anchor': 'middle' }, svg).textContent = fmt(v, metric, true);
+  }
+  svgEl('text', { class: 'axis-title', x: m.l - 14, y: 14 }, svg).textContent = 'Intelligence index';
+  svgEl('text', { class: 'axis-title', x: m.l + pw / 2, y: H - 6, 'text-anchor': 'middle' }, svg).textContent = def.xTitle.replace('{s}', log ? 'log' : 'linear');
+
+  if (S.frontier) {
+    const fr = paretoRows(rows, metric);
+    if (fr.length > 1) svgEl('path', { class: 'pareto-line', d: fr.map((r, i) => `${i ? 'L' : 'M'}${X(val(r, metric))} ${Y(r.intelligence)}`).join('') }, svg);
+  }
+
+  const byFam = new Map();
+  for (const r of rows) (byFam.get(r.family) || byFam.set(r.family, []).get(r.family)).push(r);
+  for (const rs of byFam.values()) rs.sort((a, b) => a.effortOrder - b.effortOrder);
+  const fams = [...byFam.keys()].map(id => FAM.get(id));
+  // label stack in the right gutter, anchored at each model's top point
+  const labels = fams.map(f => {
+    const top = byFam.get(f.id).reduce((a, b) => b.intelligence > a.intelligence ? b : a);
+    return { f, px: X(val(top, metric)), py: Y(top.intelligence), y: Y(top.intelligence) };
+  }).sort((a, b) => a.y - b.y);
+  const gap = 18;
+  for (let i = 1; i < labels.length; i++) labels[i].y = Math.max(labels[i].y, labels[i - 1].y + gap);
+  if (labels.length && labels[labels.length - 1].y > m.t + ph) {
+    labels[labels.length - 1].y = m.t + ph;
+    for (let i = labels.length - 2; i >= 0; i--) labels[i].y = Math.min(labels[i].y, labels[i + 1].y - gap);
+  }
+  const labelOf = new Map(labels.map(l => [l.f.id, l]));
+
+  for (const f of fams) {
+    const rs = byFam.get(f.id);
+    const g = svgEl('g', { class: 'series', 'data-fam': f.id }, svg);
+    if (S.labels) {
+      const l = labelOf.get(f.id);
+      svgEl('path', { class: 'leader', d: `M${l.px + 6} ${l.py}L${m.l + pw + 12} ${l.y}` }, g);
+      const lab = svgEl('g', { class: 'series-label', tabindex: 0, role: 'button', 'aria-label': `Highlight ${f.name}` }, g);
+      svgMono(lab, m.l + pw + 16, l.y - 7, f.lab);
+      svgEl('text', { x: m.l + pw + 36, y: l.y + 4, style: `fill: ${f.color}; font-size: 13px; font-weight: 550` }, lab).textContent = shortName(f.name);
+      const hl = () => setFocus(sec, f.id), un = () => setFocus(sec, null);
+      lab.addEventListener('pointerenter', hl); lab.addEventListener('pointerleave', un);
+      lab.addEventListener('focus', hl); lab.addEventListener('blur', un);
+      lab.addEventListener('contextmenu', e => { e.preventDefault(); openMenu(e.clientX, e.clientY, rs[rs.length - 1]); });
+    }
+    if (rs.length > 1) svgEl('path', { d: rs.map((r, i) => `${i ? 'L' : 'M'}${X(val(r, metric))} ${Y(r.intelligence)}`).join(''), fill: 'none', 'stroke-width': 1.5, style: `stroke: ${f.color}; opacity: .85` }, g);
+    for (const r of rs) svgEl('circle', { cx: X(val(r, metric)), cy: Y(r.intelligence), r: 4.5, style: `fill: ${f.color}; fill-opacity: ${markOpacity(r)}; stroke: var(--bg); stroke-width: 1.5` }, g);
+    for (const r of rs) wireHit(svgEl('circle', { class: 'hit', cx: X(val(r, metric)), cy: Y(r.intelligence), r: 10 }, g), def, r, sec);
+  }
+}
+
+// ---------- bars ----------
+function drawBars(sec, def) {
+  const metric = def.metric;
+  const canvas = sec.querySelector('.chart-canvas');
+  canvas.querySelectorAll('svg, .empty').forEach(n => n.remove());
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  if (W < 50 || H < 50) return;
+  const rows = visibleRows(metric);
+  if (!rows.length) { emptyState(canvas, 'Pick models in the sidebar to see them here.'); return; }
+  const dir = S.sort === 'desc' ? -1 : 1;
+  let groups;
+  if (S.grouped) {
+    const by = new Map();
+    for (const r of rows) (by.get(r.family) || by.set(r.family, []).get(r.family)).push(r);
+    groups = [...by].map(([id, rs]) => ({ fam: FAM.get(id), rows: rs.sort((a, b) => a.effortOrder - b.effortOrder), key: Math.max(...rs.map(r => val(r, metric))) }));
+  } else {
+    groups = rows.map(r => ({ fam: FAM.get(r.family), rows: [r], key: val(r, metric) }));
+  }
+  groups.sort((a, b) => (a.key - b.key) * dir);
+
+  const m = { l: 48, r: 8, t: 30, b: S.grouped ? 78 : 96 };
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const nBars = groups.reduce((s, g) => s + g.rows.length, 0);
+  const gapU = S.grouped ? 1.6 : 0.4;
+  const unit = pw / (nBars + (groups.length - 1) * gapU + 0.5);
+  const bw = Math.max(2, unit * 0.82);
+  const hi = Math.max(...rows.map(r => val(r, metric))) * 1.08;
+  const ticks = linTicks(0, hi, ph, 60);
+  const top = Math.max(hi, ticks[ticks.length - 1]);
+  const Y = v => m.t + (1 - v / top) * ph;
+
+  const svg = svgEl('svg', { class: 'chart-svg', width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: 'group', 'aria-label': def.label }, canvas);
+  for (const v of ticks) {
+    svgEl('line', { class: 'gridline', x1: m.l, x2: m.l + pw, y1: Y(v), y2: Y(v) }, svg);
+    svgEl('text', { class: 'tick', x: m.l - 10, y: Y(v) + 4, 'text-anchor': 'end' }, svg).textContent = fmt(v, metric, true);
+  }
+  svgEl('text', { class: 'axis-title', x: m.l - 14, y: 14 }, svg).textContent = METRICS[metric].unit;
+  const showValues = S.labels && bw >= 14;
+  let x = m.l + unit * 0.25;
+  for (const grp of groups) {
+    const g = svgEl('g', { class: 'series', 'data-fam': grp.fam.id }, svg);
+    const x0 = x;
+    for (const r of grp.rows) {
+      const v = val(r, metric), y = Y(v), bh = Math.max(1, m.t + ph - y), rad = Math.min(3, bw / 2, bh);
+      svgEl('path', { d: `M${x} ${m.t + ph}V${y + rad}Q${x} ${y} ${x + rad} ${y}H${x + bw - rad}Q${x + bw} ${y} ${x + bw} ${y + rad}V${m.t + ph}Z`, style: `fill: ${grp.fam.color}; fill-opacity: ${markOpacity(r)}` }, g);
+      if (showValues) svgEl('text', { class: 'bar-value', x: x + bw / 2, y: y - 5, 'text-anchor': 'middle', style: `font-size: ${bw < 22 ? 9 : 10.5}px` }, g).textContent = fmt(v, metric, true);
+      if (bw >= 9) svgEl('text', { class: 'bar-effort', x: x + bw / 2, y: m.t + ph + 13, 'text-anchor': 'middle' }, g).textContent = EFFORT_LETTER[effortKey(r)] || '';
+      wireHit(svgEl('rect', { class: 'hit', x: x - unit * 0.09, y: m.t, width: unit, height: ph }, g), def, r, sec);
+      x += unit;
+    }
+    const cx = (x0 + x - unit + bw) / 2;
+    if (S.grouped) {
+      svgMono(g, cx - 7, m.t + ph + 22, grp.fam.lab);
+      const words = shortName(grp.fam.name).split(' ');
+      const maxCh = Math.max(5, Math.floor((x - x0 + unit * gapU * 0.9) / 6.4));
+      const lines = []; let cur = '';
+      for (const w of words) { if (cur && (cur + ' ' + w).length > maxCh) { lines.push(cur); cur = w; } else cur = (cur + ' ' + w).trim(); }
+      lines.push(cur);
+      lines.slice(0, 3).forEach((ln, i) => { svgEl('text', { class: 'group-name', x: cx, y: m.t + ph + 50 + i * 13, 'text-anchor': 'middle', style: `fill: ${grp.fam.color}` }, g).textContent = ln; });
+    } else {
+      svgEl('text', { class: 'group-name', x: cx, y: m.t + ph + 24, 'text-anchor': 'end', transform: `rotate(-50 ${cx} ${m.t + ph + 24})`, style: `fill: ${grp.fam.color}; font-size: 10.5px` }, g).textContent = shortName(grp.fam.name);
+    }
+    x += unit * gapU;
+  }
+}
+
+// ---------- sections ----------
+const feed = document.getElementById('feed');
+const chartMode = def => def.scatter || (def.scatterToggle && S.scatter.includes(def.id)) ? 'scatter' : 'bars';
+function buildSections() {
+  feed.innerHTML = '';
+  for (const def of CHARTS) {
+    feed.append(h('section', { class: 'chart-section', id: def.id, 'data-id': def.id, 'aria-label': def.label },
+      h('div', { class: 'chart-heading' }, h('h2', { text: def.label }), h('div', { class: 'chart-controls' })),
+      h('div', { class: 'chart-wrap' }, h('div', { class: 'chart-canvas' }), h('div', { class: 'chart-tooltip', hidden: true, 'aria-live': 'polite' }))));
+  }
+}
+function renderControls(sec, def) {
+  const box = sec.querySelector('.chart-controls');
+  box.innerHTML = '';
+  const mode = chartMode(def);
+  if (def.metric === 'share') box.append(allowanceControl());
+  if (mode === 'scatter') {
+    box.append(h('button', { class: 'pareto-toggle', type: 'button', 'aria-pressed': String(S.frontier), title: 'Show non-dominated variants: no other visible variant is both better and cheaper or faster.', on: { click: () => { S.frontier = !S.frontier; commit(); } } }, check(S.frontier), 'Pareto line'));
+    const lin = S.linear.includes(def.id);
+    box.append(h('div', { class: 'chart-scale', role: 'group', 'aria-label': `${def.label} axis scale` },
+      h('button', { type: 'button', 'aria-pressed': String(lin), text: 'Linear', on: { click: () => { if (!lin) S.linear.push(def.id); commit(); } } }),
+      h('button', { type: 'button', 'aria-pressed': String(!lin), text: 'Log', on: { click: () => { S.linear = S.linear.filter(i => i !== def.id); commit(); } } })));
+  }
+  if (def.scatterToggle) {
+    const sc = mode === 'scatter';
+    box.append(h('div', { class: 'chart-scale', role: 'group', 'aria-label': 'Chart type' },
+      h('button', { type: 'button', 'aria-pressed': String(!sc), text: 'Bars', on: { click: () => { S.scatter = S.scatter.filter(i => i !== def.id); delete pins[def.id]; commit(); } } }),
+      h('button', { type: 'button', 'aria-pressed': String(sc), text: 'Scatter', on: { click: () => { if (!sc) S.scatter.push(def.id); delete pins[def.id]; commit(); } } })));
+  }
+}
+function renderChart(sec) {
+  const def = defOf(sec.dataset.id);
+  renderControls(sec, def);
+  if (chartMode(def) === 'scatter') drawScatter(sec, def); else drawBars(sec, def);
+  showTooltip(def, null, sec);
+  setFocus(sec, null);
+}
+function renderCharts() { for (const sec of feed.children) renderChart(sec); }
+
+// ---------- allowance popover (share chart) ----------
+let allowOpen = false;
+const shareSec = () => document.getElementById('share-intelligence');
+function allowanceControl() {
+  const wrap = h('div', { class: 'allow-wrap' },
+    h('button', { class: 'allow-btn', type: 'button', 'aria-expanded': String(allowOpen), text: 'Allowances', on: { click: () => { allowOpen = !allowOpen; renderControls(shareSec(), defOf('share-intelligence')); } } }));
+  if (!allowOpen) return wrap;
+  const pop = h('div', { class: 'allow-pop', role: 'dialog', 'aria-label': 'Weekly plan allowances' },
+    h('h3', { text: 'Weekly allowance, in API dollars' }),
+    h('p', { text: 'No provider publishes this. These were measured by running fixed coding tasks through each CLI and reading the plan meter before and after. Google is not measured, so it stays off the chart unless you enter a number.' }));
+  for (const lab of Object.keys(PLANS)) {
+    const p = PLANS[lab], w = weekly(lab), b = basisOf(lab);
+    const input = h('input', { id: 'allow-' + lab, type: 'number', min: '1', step: '1', inputmode: 'decimal', placeholder: 'none', 'aria-label': `${labNameOf(lab)} weekly allowance in API dollars` });
+    input.value = w ? Math.round(w) : '';
+    input.addEventListener('change', () => {
+      const v = parseFloat(input.value);
+      if (v > 0) S.overrides[lab] = v; else delete S.overrides[lab];
+      commit();
+      document.getElementById('allow-' + lab)?.focus();
+    });
+    pop.append(h('div', { class: 'allow-row' },
+      h('span', { class: 'who' }, mono(lab), labNameOf(lab), h('span', { class: 'basis ' + b, text: { measured: 'measured', yours: 'yours', none: '' }[b] })),
+      h('span', { class: 'plan', text: p.plan + (p.price ? ` · $${p.price}/mo` : '') }),
+      p.note && b !== 'yours' ? h('span', { class: 'plan', text: p.note }) : null,
+      h('label', {}, '$', input, '/wk')));
+  }
+  pop.append(h('div', { class: 'allow-foot' }, h('span', { text: 'Other labs have no plan data.' }), h('button', { class: 'text-button', type: 'button', text: 'Reset', on: { click: () => { S.overrides = {}; commit(); } } })));
+  wrap.append(pop);
+  return wrap;
+}
+addEventListener('pointerdown', e => {
+  if (allowOpen && !e.target.closest('.allow-wrap')) { allowOpen = false; renderControls(shareSec(), defOf('share-intelligence')); }
+});
+
+// ---------- tabs ----------
+const tabs = document.getElementById('tabs');
+let activeId = CHARTS[0].id, scrollLock = 0;
+function renderTabs() {
+  tabs.innerHTML = '';
+  for (const def of CHARTS) {
+    if (def.divider) tabs.append(h('span', { class: 'tab-divider', 'aria-hidden': 'true' }));
+    tabs.append(h('button', { type: 'button', class: def.id === activeId ? 'active' : '', 'aria-current': def.id === activeId ? 'true' : null, on: { click: () => goTo(def.id) } },
+      def.label, def.isNew ? h('span', { class: 'new-tag', text: 'new' }) : null));
+  }
+}
+function goTo(id) {
+  activeId = id; scrollLock = Date.now() + 1200; renderTabs(); renderSidebar();
+  document.getElementById(id).scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  tabs.querySelector('.active')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+}
+function syncActive() {
+  if (Date.now() < scrollLock) return;
+  const top = innerWidth <= 900 ? 95 : feed.getBoundingClientRect().top;
+  let best = activeId, bestD = Infinity;
+  for (const sec of feed.children) { const d = Math.abs(sec.getBoundingClientRect().top - top); if (d < bestD) { bestD = d; best = sec.dataset.id; } }
+  if (best !== activeId) { activeId = best; renderTabs(); renderSidebar(); }
+}
+feed.addEventListener('scroll', syncActive, { passive: true });
+addEventListener('scroll', syncActive, { passive: true });
+
+// ---------- sidebar ----------
+const side = document.getElementById('sidebar');
+let query = '';
+function toggleFam(id, on) {
+  const set = new Set(S.selected);
+  (on ?? !set.has(id)) ? set.add(id) : set.delete(id);
+  S.selected = [...set]; commit();
+}
+function frontierFamsForActive() {
+  if (!S.frontier) return null;
+  const def = defOf(activeId);
+  if (!def || chartMode(def) !== 'scatter') return null;
+  return new Set(paretoRows(visibleRows(def.metric), def.metric).map(r => r.family));
+}
+function modelRow(f, onF) {
+  const on = S.selected.includes(f.id);
+  const cls = 'model-row' + (onF && on ? (onF.has(f.id) ? ' on-frontier' : ' off-frontier') : '');
+  return h('button', { class: cls, type: 'button', 'aria-pressed': String(on), 'aria-label': `${f.name} · ${f.labName}`, on: { click: () => toggleFam(f.id) } },
+    mono(f.lab), h('span', { class: 'model-name', text: shortName(f.name) }), h('span', { class: 'model-dot', style: `color: ${f.color}` }));
+}
+function renderSidebar() {
+  const focused = document.activeElement?.id === 'model-search';
+  const caret = focused ? document.activeElement.selectionStart : null;
+  const scroll = side.scrollTop;
+  side.innerHTML = '';
+  const onF = frontierFamsForActive();
+  side.append(h('div', { class: 'side-heading' },
+    h('h2', {}, 'Models', h('span', { text: S.selected.length })),
+    h('button', { type: 'button', 'aria-label': 'Reset selection', title: 'Reset selection', on: { click: () => { const keep = S.overrides; S = DEFAULTS(); S.overrides = keep; query = ''; commit(); } } },
+      icon(14, 14, '0 0 14 14', s => svgEl('path', { d: 'M2.5 7a4.5 4.5 0 1 0 1.3-3.2M2.5 1.8v2.4h2.4', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.3 }, s))),
+    h('button', { class: 'sheet-done', type: 'button', text: 'Done', on: { click: () => side.classList.remove('open') } })));
+  const input = h('input', { id: 'model-search', type: 'text', placeholder: 'Find models', 'aria-label': 'Find a model', autocomplete: 'off', spellcheck: 'false' });
+  input.value = query;
+  input.addEventListener('input', () => { query = input.value; renderSidebar(); });
+  input.addEventListener('keydown', e => { if (e.key === 'Escape') { query = ''; input.blur(); renderSidebar(); } });
+  side.append(h('label', { class: 'search' },
+    icon(13, 13, '0 0 13 13', s => { svgEl('circle', { cx: 5.5, cy: 5.5, r: 4, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.3 }, s); svgEl('path', { d: 'M8.5 8.5L12 12', stroke: 'currentColor', 'stroke-width': 1.3 }, s); }),
+    input, h('kbd', { text: '/' })));
+
+  const q = query.trim().toLowerCase();
+  if (q) {
+    const hits = ALL_FAMS.filter(f => `${f.name} ${f.labName}`.toLowerCase().includes(q));
+    side.append(h('div', {}, h('div', { class: 'section-head' }, h('h3', { text: 'Results' })), hits.length ? hits.map(f => modelRow(f, onF)) : h('p', { class: 'side-note', text: 'No models match.' })));
+  } else {
+    side.append(h('div', { class: 'effort-filter' }, h('h3', { text: 'Reasoning' }), h('div', {}, EFFORTS.map(e => h('button', { type: 'button', 'aria-pressed': String(!S.excluded.includes(e)), text: e, on: { click: () => { S.excluded = S.excluded.includes(e) ? S.excluded.filter(x => x !== e) : [...S.excluded, e]; commit(); } } })))));
+    const tierBtn = t => {
+      const ids = FRONTIER_FAMS.filter(f => CFG.frontier[f.id].tier === t).map(f => f.id);
+      const all = ids.length > 0 && ids.every(id => S.selected.includes(id));
+      return h('button', { type: 'button', 'aria-pressed': String(all), text: t, disabled: !ids.length, on: { click: () => { const set = new Set(S.selected); ids.forEach(id => all ? set.delete(id) : set.add(id)); S.selected = [...set]; commit(); } } });
+    };
+    side.append(h('div', {}, h('div', { class: 'section-head' }, h('h3', { text: 'Frontier' }), ['Small', 'Medium', 'Large'].map(tierBtn)), FRONTIER_FAMS.map(f => modelRow(f, onF))));
+    const nAll = NOTABLE_FAMS.length > 0 && NOTABLE_FAMS.every(f => S.selected.includes(f.id));
+    side.append(h('div', {}, h('div', { class: 'section-head' }, h('h3', { text: 'Notable' }), h('button', { type: 'button', 'aria-pressed': String(nAll), text: 'All', on: { click: () => { const set = new Set(S.selected); NOTABLE_FAMS.forEach(f => nAll ? set.delete(f.id) : set.add(f.id)); S.selected = [...set]; commit(); } } })), NOTABLE_FAMS.map(f => modelRow(f, onF))));
+    const others = OTHER_FAMS.filter(f => S.selected.includes(f.id) || (S.showAll && (S.showOpen || !f.open) && (S.showDeprecated || !f.deprecated)));
+    if (others.length) side.append(h('div', {}, h('div', { class: 'section-head' }, h('h3', { text: 'Other' })), others.map(f => modelRow(f, onF))));
+    side.append(h('div', { class: 'browse-options' },
+      h('button', { type: 'button', text: S.showAll ? 'Hide other models' : 'Show all models', on: { click: () => { S.showAll = !S.showAll; save(); renderSidebar(); } } }),
+      S.showAll ? h('div', {},
+        h('button', { type: 'button', 'aria-pressed': String(S.showOpen), text: 'Open weights', on: { click: () => { S.showOpen = !S.showOpen; save(); renderSidebar(); } } }),
+        h('button', { type: 'button', 'aria-pressed': String(S.showDeprecated), text: 'Deprecated', on: { click: () => { S.showDeprecated = !S.showDeprecated; save(); renderSidebar(); } } })) : null));
+  }
+  document.getElementById('filter-count').textContent = S.selected.length;
+  side.scrollTop = scroll;
+  if (focused) { const n = document.getElementById('model-search'); n.focus(); if (caret != null) n.setSelectionRange(caret, caret); }
+}
+addEventListener('keydown', e => {
+  if (e.key === '/' && !/INPUT|TEXTAREA/.test(document.activeElement?.tagName)) { e.preventDefault(); document.getElementById('model-search')?.focus(); }
+});
+document.getElementById('filter-open').addEventListener('click', () => side.classList.add('open'));
+
+// ---------- settings + theme ----------
+function renderSettings() {
+  const pop = document.getElementById('settings-pop');
+  pop.innerHTML = '';
+  pop.append(
+    h('button', { class: 'check-button', type: 'button', 'aria-pressed': String(S.labels), on: { click: () => { S.labels = !S.labels; commit(); } } }, check(S.labels), 'Labels'),
+    h('button', { class: 'check-button', type: 'button', 'aria-pressed': String(S.grouped), on: { click: () => { S.grouped = !S.grouped; commit(); } } }, check(S.grouped), 'Group by model'),
+    h('span', { class: 'control-label', text: 'Bar order' }),
+    h('div', { class: 'segmented' },
+      h('button', { type: 'button', class: S.sort === 'asc' ? 'active' : '', text: 'Highest last', on: { click: () => { S.sort = 'asc'; commit(); } } }),
+      h('button', { type: 'button', class: S.sort === 'desc' ? 'active' : '', text: 'Highest first', on: { click: () => { S.sort = 'desc'; commit(); } } })));
+}
+document.addEventListener('pointerdown', e => { const d = document.getElementById('settings'); if (d.open && !d.contains(e.target)) d.open = false; });
+const themeBtn = document.getElementById('theme');
+const isDark = () => { const t = document.documentElement.dataset.theme; return t ? t === 'dark' : !matchMedia('(prefers-color-scheme: light)').matches; };
+function renderThemeBtn() {
+  const dark = isDark();
+  themeBtn.setAttribute('aria-label', dark ? 'Switch to light mode' : 'Switch to dark mode');
+  themeBtn.innerHTML = dark
+    ? '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1"/></svg>'
+    : '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M13.5 9.6A5.6 5.6 0 0 1 6.4 2.5a5.6 5.6 0 1 0 7.1 7.1z"/></svg>';
+}
+themeBtn.addEventListener('click', () => {
+  const next = isDark() ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem(STORE + '-theme', next); } catch (e) {}
+});
+new MutationObserver(renderThemeBtn).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+// ---------- boot ----------
+function commit() { save(); renderSettings(); renderSidebar(); renderCharts(); }
+document.getElementById('snap').textContent = DATA.checked || DATA.snapshot;
+buildSections();
+renderTabs();
+renderThemeBtn();
+renderSettings();
+renderSidebar();
+renderCharts();
+let rt;
+new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(renderCharts, 60); }).observe(feed);
+</script>
+
+</body>
+</html>
